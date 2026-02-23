@@ -3,7 +3,7 @@
 import os
 import sys
 
-from h2c import IngressProvider
+from h2c import IngressProvider  # pylint: disable=import-error  # h2c resolves at runtime
 
 
 class CaddyProvider(IngressProvider):
