@@ -2,7 +2,7 @@
 
 Caddy reverse proxy provider for [helmfile2compose](https://github.com/helmfile2compose/helmfile2compose) — converts Ingress manifests into a Caddy compose service and generates a Caddyfile.
 
-**The Gatekeeper** — one of the Seven Bishops, the founding extensions of the helmfile2compose distribution.
+**The Gatekeeper** — one of the Eight Monks, the founding extensions of the helmfile2compose distribution.
 
 > Heresy level: 3/10 — conjures an entire service from thin air and writes its own config file. Moderate apostasy.
 
