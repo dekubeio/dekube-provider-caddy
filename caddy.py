@@ -3,7 +3,7 @@
 import os
 import sys
 
-from h2c.core.ingress import IngressProvider
+from h2c import IngressProvider
 
 
 class CaddyProvider(IngressProvider):
