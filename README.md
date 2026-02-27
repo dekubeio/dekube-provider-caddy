@@ -16,7 +16,7 @@ Caddy reverse proxy provider for [dekube](https://dekube.io) — converts Ingres
 
 ## Configuration
 
-Extension config in `helmfile2compose.yaml`:
+Extension config in `dekube.yaml`:
 
 ```yaml
 extensions:
