@@ -1,6 +1,6 @@
-# h2c-provider-caddy
+# dekube-provider-caddy
 
-Caddy reverse proxy provider for [helmfile2compose](https://github.com/helmfile2compose/helmfile2compose) — converts Ingress manifests into a Caddy compose service and generates a Caddyfile.
+Caddy reverse proxy provider for [dekube](https://dekube.io) — converts Ingress manifests into a Caddy compose service and generates a Caddyfile.
 
 **The Gatekeeper** — one of the Eight Monks, the founding extensions of the helmfile2compose distribution.
 
@@ -27,10 +27,10 @@ extensions:
 
 ## Install
 
-Via [h2c-manager](https://github.com/helmfile2compose/h2c-manager):
+Via [dekube-manager](https://github.com/dekubeio/dekube-manager):
 
 ```sh
-python3 h2c-manager.py caddy
+python3 dekube-manager.py caddy
 ```
 
 Or listed in `distribution.json` — installed automatically when building a distribution.
