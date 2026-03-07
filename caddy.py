@@ -91,6 +91,18 @@ def _write_caddy_reverse_proxy(f, entry: dict, indent: str = "\t") -> None:
     f.write(f"{indent}}}\n")
 
 
+def _write_caddy_directives(f, entry: dict, indent: str = "\t") -> None:
+    """Write structured entry fields as Caddy directives."""
+    # Structured fields: response_headers, max_body_size
+    for hdr_name, hdr_val in (entry.get("response_headers") or {}).items():
+        f.write(f"{indent}header {hdr_name} \"{hdr_val}\"\n")
+    if entry.get("max_body_size"):
+        f.write(f"{indent}request_body max_size {entry['max_body_size']}\n")
+    # Fallback: raw extra_directives (deprecated, for third-party rewriter compat)
+    for directive in entry.get("extra_directives", []):
+        f.write(f"{indent}{directive}\n")
+
+
 def _write_caddy_host_block(f, host: str, host_entries: list[dict],
                             tls_internal: bool = False) -> None:
     """Write a single Caddy host block (specific paths first, catch-all last)."""
@@ -103,12 +115,10 @@ def _write_caddy_host_block(f, host: str, host_entries: list[dict],
         f.write(f"\thandle {entry['path']}* {{\n")
         if entry.get("strip_prefix"):
             f.write(f"\t\turi strip_prefix {entry['strip_prefix']}\n")
-        for directive in entry.get("extra_directives", []):
-            f.write(f"\t\t{directive}\n")
+        _write_caddy_directives(f, entry, indent="\t\t")
         _write_caddy_reverse_proxy(f, entry, indent="\t\t")
         f.write("\t}\n")
     for entry in catchall:
-        for directive in entry.get("extra_directives", []):
-            f.write(f"\t{directive}\n")
+        _write_caddy_directives(f, entry)
         _write_caddy_reverse_proxy(f, entry)
     f.write("}\n\n")
