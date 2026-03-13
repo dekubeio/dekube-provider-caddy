@@ -95,7 +95,8 @@ def _write_caddy_directives(f, entry: dict, indent: str = "\t") -> None:
     """Write structured entry fields as Caddy directives."""
     # Structured fields: response_headers, max_body_size
     for hdr_name, hdr_val in (entry.get("response_headers") or {}).items():
-        f.write(f"{indent}header {hdr_name} \"{hdr_val}\"\n")
+        safe_val = str(hdr_val).replace('"', '\\"').replace('\n', ' ')
+        f.write(f"{indent}header {hdr_name} \"{safe_val}\"\n")
     if entry.get("max_body_size"):
         f.write(f"{indent}request_body max_size {entry['max_body_size']}\n")
     # Fallback: raw extra_directives (deprecated, for third-party rewriter compat)
