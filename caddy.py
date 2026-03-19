@@ -65,61 +65,61 @@ class CaddyProvider(IngressProvider):
             if caddy_email:
                 f.write(f"{{\n\temail {caddy_email}\n}}\n\n")
             for host, host_entries in by_host.items():
-                _write_caddy_host_block(f, host, host_entries, tls_internal)
+                self._write_caddy_host_block(f, host, host_entries, tls_internal)
         print(f"Wrote {path}", file=sys.stderr)
 
+    @staticmethod
+    def _write_caddy_reverse_proxy(f, entry: dict, indent: str = "\t") -> None:
+        """Write a reverse_proxy directive, with TLS transport if upstream is HTTPS."""
+        scheme = entry.get("scheme", "http")
+        upstream = entry["upstream"]
+        if scheme != "https":
+            f.write(f"{indent}reverse_proxy {upstream}\n")
+            return
+        ca_secret = entry.get("server_ca_secret", "")
+        f.write(f"{indent}reverse_proxy https://{upstream} {{\n")
+        f.write(f"{indent}\ttransport http {{\n")
+        if ca_secret:
+            sni = entry.get("server_sni", "")
+            if sni:
+                f.write(f"{indent}\t\ttls_server_name {sni}\n")
+            f.write(f"{indent}\t\ttls_trust_pool file"
+                    f" /etc/caddy/certs/{ca_secret}/ca.crt\n")
+        else:
+            f.write(f"{indent}\t\ttls_insecure_skip_verify\n")
+        f.write(f"{indent}\t}}\n")
+        f.write(f"{indent}}}\n")
 
-def _write_caddy_reverse_proxy(f, entry: dict, indent: str = "\t") -> None:
-    """Write a reverse_proxy directive, with TLS transport if upstream is HTTPS."""
-    scheme = entry.get("scheme", "http")
-    upstream = entry["upstream"]
-    if scheme != "https":
-        f.write(f"{indent}reverse_proxy {upstream}\n")
-        return
-    ca_secret = entry.get("server_ca_secret", "")
-    f.write(f"{indent}reverse_proxy https://{upstream} {{\n")
-    f.write(f"{indent}\ttransport http {{\n")
-    if ca_secret:
-        sni = entry.get("server_sni", "")
-        if sni:
-            f.write(f"{indent}\t\ttls_server_name {sni}\n")
-        f.write(f"{indent}\t\ttls_trust_pool file"
-                f" /etc/caddy/certs/{ca_secret}/ca.crt\n")
-    else:
-        f.write(f"{indent}\t\ttls_insecure_skip_verify\n")
-    f.write(f"{indent}\t}}\n")
-    f.write(f"{indent}}}\n")
+    @staticmethod
+    def _write_caddy_directives(f, entry: dict, indent: str = "\t") -> None:
+        """Write structured entry fields as Caddy directives."""
+        # Structured fields: response_headers, max_body_size
+        for hdr_name, hdr_val in (entry.get("response_headers") or {}).items():
+            safe_val = str(hdr_val).replace('"', '\\"').replace('\n', ' ')
+            f.write(f"{indent}header {hdr_name} \"{safe_val}\"\n")
+        if entry.get("max_body_size"):
+            f.write(f"{indent}request_body max_size {entry['max_body_size']}\n")
+        # Fallback: raw extra_directives (deprecated, for third-party rewriter compat)
+        for directive in entry.get("extra_directives", []):
+            f.write(f"{indent}{directive}\n")
 
-
-def _write_caddy_directives(f, entry: dict, indent: str = "\t") -> None:
-    """Write structured entry fields as Caddy directives."""
-    # Structured fields: response_headers, max_body_size
-    for hdr_name, hdr_val in (entry.get("response_headers") or {}).items():
-        safe_val = str(hdr_val).replace('"', '\\"').replace('\n', ' ')
-        f.write(f"{indent}header {hdr_name} \"{safe_val}\"\n")
-    if entry.get("max_body_size"):
-        f.write(f"{indent}request_body max_size {entry['max_body_size']}\n")
-    # Fallback: raw extra_directives (deprecated, for third-party rewriter compat)
-    for directive in entry.get("extra_directives", []):
-        f.write(f"{indent}{directive}\n")
-
-
-def _write_caddy_host_block(f, host: str, host_entries: list[dict],
-                            tls_internal: bool = False) -> None:
-    """Write a single Caddy host block (specific paths first, catch-all last)."""
-    specific = [e for e in host_entries if e["path"] and e["path"] != "/"]
-    catchall = [e for e in host_entries if not e["path"] or e["path"] == "/"]
-    f.write(f"{host} {{\n")
-    if tls_internal:
-        f.write("\ttls internal\n")
-    for entry in specific:
-        f.write(f"\thandle {entry['path']}* {{\n")
-        if entry.get("strip_prefix"):
-            f.write(f"\t\turi strip_prefix {entry['strip_prefix']}\n")
-        _write_caddy_directives(f, entry, indent="\t\t")
-        _write_caddy_reverse_proxy(f, entry, indent="\t\t")
-        f.write("\t}\n")
-    for entry in catchall:
-        _write_caddy_directives(f, entry)
-        _write_caddy_reverse_proxy(f, entry)
-    f.write("}\n\n")
+    @staticmethod
+    def _write_caddy_host_block(f, host: str, host_entries: list[dict],
+                                tls_internal: bool = False) -> None:
+        """Write a single Caddy host block (specific paths first, catch-all last)."""
+        specific = [e for e in host_entries if e["path"] and e["path"] != "/"]
+        catchall = [e for e in host_entries if not e["path"] or e["path"] == "/"]
+        f.write(f"{host} {{\n")
+        if tls_internal:
+            f.write("\ttls internal\n")
+        for entry in specific:
+            f.write(f"\thandle {entry['path']}* {{\n")
+            if entry.get("strip_prefix"):
+                f.write(f"\t\turi strip_prefix {entry['strip_prefix']}\n")
+            CaddyProvider._write_caddy_directives(f, entry, indent="\t\t")
+            CaddyProvider._write_caddy_reverse_proxy(f, entry, indent="\t\t")
+            f.write("\t}\n")
+        for entry in catchall:
+            CaddyProvider._write_caddy_directives(f, entry)
+            CaddyProvider._write_caddy_reverse_proxy(f, entry)
+        f.write("}\n\n")
