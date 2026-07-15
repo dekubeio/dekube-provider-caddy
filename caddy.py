@@ -42,7 +42,7 @@ class CaddyProvider(IngressProvider):
             return
 
         # Extension config with fallback to top-level caddy_* keys for retrocompat
-        ext_cfg = config.get("extensions", {}).get(self.name, {})
+        ext_cfg = (config.get("extensions") or {}).get(self.name) or {}
         caddy_email = ext_cfg.get("email")
         tls_internal = bool(ext_cfg.get("tls_internal"))
 
@@ -100,7 +100,7 @@ class CaddyProvider(IngressProvider):
         if entry.get("max_body_size"):
             f.write(f"{indent}request_body max_size {entry['max_body_size']}\n")
         # Fallback: raw extra_directives (deprecated, for third-party rewriter compat)
-        for directive in entry.get("extra_directives", []):
+        for directive in entry.get("extra_directives") or []:
             f.write(f"{indent}{directive}\n")
 
     @staticmethod
