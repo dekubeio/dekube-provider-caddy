@@ -43,15 +43,22 @@ class CaddyProvider(IngressProvider):
         """Write each server-ca Secret to disk and resolve its actual cert filename.
 
         Stashes the resolved filename onto each matching entry (as `_server_ca_file`)
-        for write_config() to use later — it doesn't receive ctx. Returns the set of
-        secret names successfully written.
+        for write_config() to use later — it doesn't receive ctx. Returns
+        {secret name: cert filename} for every referenced secret (written, or
+        expected from the user).
         """
         ca_secret_names = {e["server_ca_secret"] for e in entries
                             if e.get("server_ca_secret")}
         ca_files = {}
         for secret_name in ca_secret_names:
             if write_secret_files(secret_name, ctx) is None:
-                continue  # not found — ctx.warnings already has the reason
+                # Not in the manifests (ExternalSecret, hand-placed files…): keep the
+                # mount so a user-provided ./secrets/<name>/ca.crt still works
+                ca_files[secret_name] = "ca.crt"
+                ctx.warnings.append(
+                    f"Secret '{secret_name}' referenced as server-ca is not in the manifests "
+                    f"— provide ./secrets/{secret_name}/ca.crt yourself")
+                continue
             secret = ctx.secrets.get(secret_name) or {}
             keys = list((secret.get("data") or {})) + list((secret.get("stringData") or {}))
             if "ca.crt" in keys:
