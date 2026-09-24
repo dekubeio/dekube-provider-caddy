@@ -3,7 +3,7 @@
 import os
 import sys
 
-from dekube import IngressProvider  # pylint: disable=import-error  # h2c resolves at runtime
+from dekube import IngressProvider, write_secret_files  # pylint: disable=import-error  # h2c resolves at runtime
 
 
 class CaddyProvider(IngressProvider):
@@ -23,10 +23,12 @@ class CaddyProvider(IngressProvider):
             f"{volume_root}/caddy:/data",
             f"{volume_root}/caddy-config:/config",
         ]
-        # Mount CA secrets referenced by server-ca annotations
-        ca_secrets = {e["server_ca_secret"] for e in entries
-                      if e.get("server_ca_secret")}
-        for secret_name in sorted(ca_secrets):
+        # Mount CA secrets referenced by server-ca annotations. Nothing else in the
+        # pipeline volume-mounts these (they're only referenced by annotation), so we
+        # have to write them to disk ourselves — and resolve the real cert filename
+        # instead of assuming "ca.crt" (fixes both: missing dir + wrong filename).
+        ca_files = self._resolve_ca_secrets(entries, ctx)
+        for secret_name in sorted(ca_files):
             caddy_volumes.append(
                 f"./secrets/{secret_name}"
                 f":/etc/caddy/certs/{secret_name}:ro")
@@ -35,6 +37,38 @@ class CaddyProvider(IngressProvider):
             "ports": ["80:80", "443:443"],
             "volumes": caddy_volumes,
         }}
+
+    @staticmethod
+    def _resolve_ca_secrets(entries, ctx):
+        """Write each server-ca Secret to disk and resolve its actual cert filename.
+
+        Stashes the resolved filename onto each matching entry (as `_server_ca_file`)
+        for write_config() to use later — it doesn't receive ctx. Returns the set of
+        secret names successfully written.
+        """
+        ca_secret_names = {e["server_ca_secret"] for e in entries
+                            if e.get("server_ca_secret")}
+        ca_files = {}
+        for secret_name in ca_secret_names:
+            if write_secret_files(secret_name, ctx) is None:
+                continue  # not found — ctx.warnings already has the reason
+            secret = ctx.secrets.get(secret_name) or {}
+            keys = list((secret.get("data") or {})) + list((secret.get("stringData") or {}))
+            if "ca.crt" in keys:
+                ca_files[secret_name] = "ca.crt"
+            elif keys:
+                ca_files[secret_name] = keys[0]
+                ctx.warnings.append(
+                    f"Secret '{secret_name}' referenced as server-ca has no 'ca.crt' "
+                    f"key — using '{keys[0]}' instead")
+            else:
+                ca_files[secret_name] = "ca.crt"  # empty secret, keep the conventional name
+
+        for e in entries:
+            secret_name = e.get("server_ca_secret")
+            if secret_name in ca_files:
+                e["_server_ca_file"] = ca_files[secret_name]
+        return ca_files
 
     def write_config(self, entries, output_dir, config):
         """Write the Caddyfile."""
@@ -51,12 +85,13 @@ class CaddyProvider(IngressProvider):
             project = config.get("name", "project")
             filename = f"Caddyfile-{project}"
 
-        replacements = config.get("replacements", [])
+        replacements = config.get("replacements") or []
         by_host: dict[str, list[dict]] = {}
         for e in entries:
-            if replacements:
-                for r in replacements:
-                    e["upstream"] = e["upstream"].replace(r["old"], r["new"])
+            for r in replacements:
+                if not r or not r.get("old"):
+                    continue
+                e["upstream"] = e["upstream"].replace(r["old"], r.get("new") or "")
             by_host.setdefault(e["host"], []).append(e)
 
         path = os.path.join(output_dir, filename)
@@ -83,8 +118,9 @@ class CaddyProvider(IngressProvider):
             sni = entry.get("server_sni", "")
             if sni:
                 f.write(f"{indent}\t\ttls_server_name {sni}\n")
+            ca_file = entry.get("_server_ca_file", "ca.crt")
             f.write(f"{indent}\t\ttls_trust_pool file"
-                    f" /etc/caddy/certs/{ca_secret}/ca.crt\n")
+                    f" /etc/caddy/certs/{ca_secret}/{ca_file}\n")
         else:
             f.write(f"{indent}\t\ttls_insecure_skip_verify\n")
         f.write(f"{indent}\t}}\n")
