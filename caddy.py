@@ -3,7 +3,7 @@
 import os
 import sys
 
-from dekube import IngressProvider, write_secret_files  # pylint: disable=import-error  # h2c resolves at runtime
+from dekube import IngressProvider, apply_replacements, write_secret_files  # pylint: disable=import-error  # h2c resolves at runtime
 
 
 class CaddyProvider(IngressProvider):
@@ -88,10 +88,7 @@ class CaddyProvider(IngressProvider):
         replacements = config.get("replacements") or []
         by_host: dict[str, list[dict]] = {}
         for e in entries:
-            for r in replacements:
-                if not r or not r.get("old"):
-                    continue
-                e["upstream"] = e["upstream"].replace(r["old"], r.get("new") or "")
+            e["upstream"] = apply_replacements(e["upstream"], replacements)
             by_host.setdefault(e["host"], []).append(e)
 
         path = os.path.join(output_dir, filename)
